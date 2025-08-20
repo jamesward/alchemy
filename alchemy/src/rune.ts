@@ -1,31 +1,32 @@
+import * as Effect from "effect/Effect";
 import type { Binding } from "./cloudflare/bindings.ts";
-
-import type * as Effect from "effect/Effect";
 import type { Resource } from "./resource.ts";
 import type { type } from "./type.ts";
 
 export interface Rune<T> extends PromiseLike<T>, Effect.Effect<T> {}
 
-export function Rune<T>(t: T): Rune.of<T> {
+export function Rune<T>(effect: Effect.Effect<T, any, never>): Rune.of<T> {
   return new Proxy(() => {}, {
-    get(t: any, prop: string | symbol | number) {
+    apply: (_, _thisArg, args) =>
+      Rune(effect.pipe(Effect.map((fn: any) => fn(...args)))),
+    get(_: any, prop: string | symbol | number) {
+      const p = effect.pipe(Effect.map((x: any) => x[prop]));
       if (prop === "then") {
-        // TODO(sam): we need to evaluate
-        return t.then;
+        return (
+          onresolved: (value: any) => any,
+          onrejected: (reason: any) => any,
+        ) => Effect.runPromise(p).then(onresolved, onrejected);
+      } else if (prop === "catch") {
+        return (onrejected: (reason: any) => any) =>
+          Effect.runPromise(p).catch(onrejected);
+      } else if (prop === "finally") {
+        return (onfinally: () => any) =>
+          Effect.runPromise(p).finally(onfinally);
+      } else if (prop === "pipe") {
+        return (...args: Parameters<Effect.Effect<T>["pipe"]>) =>
+          Rune(p.pipe(...args) as Effect.Effect<any>);
       }
-      if (prop === "catch") {
-        return t.catch;
-      }
-      if (prop === "finally") {
-        return t.finally;
-      }
-      if (prop === "pipe") {
-        return t.pipe;
-      }
-      return Rune(t[prop]);
-    },
-    apply(target, thisArg, args) {
-      return Rune(t(...args));
+      return Rune(p);
     },
   }) as Rune.of<T>;
 }

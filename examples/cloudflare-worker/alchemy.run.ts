@@ -1,4 +1,3 @@
-import type { Rune } from "alchemy";
 import alchemy, { type } from "alchemy";
 import {
   DurableObjectNamespace,
@@ -69,12 +68,6 @@ Effect.gen(function* () {
 
   const res = yield* worker.Env.RPC.hello("John Doe");
 });
-
-type Foo = PromiseLike<string> & string & Effect.Effect<string, never, never>;
-
-type Bar = Rune<string>;
-
-const url = worker.url!;
 
 console.log({
   url: await worker.url,

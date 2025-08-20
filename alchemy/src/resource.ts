@@ -1,10 +1,10 @@
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as Schema from "effect/Schema";
 import type { YieldWrap } from "effect/Utils";
 import { apply } from "./apply.ts";
 import type { Context } from "./context.ts";
 import { DestroyStrategy } from "./destroy.ts";
-import type { Rune } from "./rune.ts";
+import { Rune } from "./rune.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
 
 declare global {
@@ -190,50 +190,52 @@ export function Resource<
 
   type Out = Awaited<ReturnType<F>>;
 
-  const provider = (async (
+  const provider = (
     resourceID: string,
     props: ResourceProps,
-  ): Promise<Resource<string>> => {
+  ): Rune.of<Resource<string>> => {
     const scope = _Scope.current;
-
     if (resourceID.includes(":")) {
       // we want to use : as an internal separator for resources
       throw new Error(`ID cannot include colons: ${resourceID}`);
     }
+    return Rune(
+      Effect.promise(() => {
+        if (scope.resources.has(resourceID)) {
+          // TODO(sam): do we want to throw?
+          // it's kind of awesome that you can re-create a resource and call apply
+          const otherResource = scope.resources.get(resourceID);
+          if (otherResource?.[ResourceKind] !== type) {
+            scope.fail();
+            const error = new Error(
+              `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.[ResourceKind]}' !== '${type}'`,
+            );
+            scope.telemetryClient.record({
+              event: "resource.error",
+              resource: type,
+              error,
+            });
+            throw error;
+          }
+        }
 
-    if (scope.resources.has(resourceID)) {
-      // TODO(sam): do we want to throw?
-      // it's kind of awesome that you can re-create a resource and call apply
-      const otherResource = scope.resources.get(resourceID);
-      if (otherResource?.[ResourceKind] !== type) {
-        scope.fail();
-        const error = new Error(
-          `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.[ResourceKind]}' !== '${type}'`,
-        );
-        scope.telemetryClient.record({
-          event: "resource.error",
-          resource: type,
-          error,
-        });
-        throw error;
-      }
-    }
-
-    // get a sequence number (unique within the scope) for the resource
-    const seq = scope.seq();
-    const meta = {
-      [ResourceKind]: type,
-      [ResourceID]: resourceID,
-      [ResourceFQN]: scope.fqn(resourceID),
-      [ResourceSeq]: seq,
-      [ResourceScope]: scope,
-      [DestroyStrategy]: options?.destroyStrategy ?? "sequential",
-    } as any as PendingResource<Out>;
-    const promise = apply(meta, props, options);
-    const resource = Object.assign(promise, meta);
-    scope.resources.set(resourceID, resource);
-    return resource;
-  }) as Provider<Type, F>;
+        // get a sequence number (unique within the scope) for the resource
+        const seq = scope.seq();
+        const meta = {
+          [ResourceKind]: type,
+          [ResourceID]: resourceID,
+          [ResourceFQN]: scope.fqn(resourceID),
+          [ResourceSeq]: seq,
+          [ResourceScope]: scope,
+          [DestroyStrategy]: options?.destroyStrategy ?? "sequential",
+        } as any as PendingResource<Out>;
+        const promise = apply(meta, props, options);
+        const resource = Object.assign(promise, meta);
+        scope.resources.set(resourceID, resource);
+        return resource;
+      }),
+    ) as Rune.of<Resource<string>>;
+  };
   provider.type = type;
   provider.handler = handler;
   provider.options = options;
@@ -260,93 +262,3 @@ export declare namespace Resource {
       ? inputArray<Tail, [...Accum, input<Head>]>
       : Accum;
 }
-
-// interface MyResourceProps {
-//   key: string;
-// }
-// type MyResource = Resource<"foo"> & {
-//   value: number;
-// };
-// const MyResource = Resource<MyResourceProps, MyResource>(
-//   "foo",
-//   async function (this, id, props) {
-//     const { key } = await resolve(props);
-//     return this({
-//       value: 1,
-//     });
-//   },
-// );
-// const _MyResource = Resource<MyResourceProps, MyResource>(
-//   "foo",
-//   function* (this, id, props) {
-//     yield* Console.log("foo");
-//     return this({
-//       value: 1,
-//     });
-//   },
-// );
-
-// Effect.gen(function* () {
-//   const myResource = yield* MyResource("foo", {
-//     key: "foo",
-//   }).pipe(
-//     Effect.retry({
-//       times: 1,
-//     }),
-//   );
-//   return myResource;
-// });
-
-// import { Worker } from "alchemy/cloudflare";
-// import * as Console from "effect/Console";
-// import type { YieldWrap } from "effect/Utils";
-// import type { Lazy } from "./lazy.ts";
-
-// async function main() {
-//   const myResource = MyEffectResource("foo", {
-//     // key: "foo",
-//     key: Promise.resolve("foo"),
-//   });
-
-//   await Worker("fo", {
-//     bindings: {
-//       key: myResource.value,
-//     },
-//   });
-
-//   (await myResource).value;
-//   myResource.value;
-// }
-
-// export type MyEffectResource = typeof MyEffectResource.output;
-
-// export const MyEffectResource = Resource({
-//   type: "my-effect-resource",
-//   input: {
-//     key: Schema.String,
-//   },
-//   output: {
-//     /**
-//      * The value of the resource.
-//      */
-//     value: Schema.Number,
-//   },
-// })(function* (id, props) {
-//   // ...
-
-//   yield* Console.log(id);
-
-//   return {
-//     value: 1,
-//   };
-// });
-
-// MyEffectResource.input.fields.key;
-
-// const _my = await MyEffectResource("foo", {
-//   key: "foo",
-// });
-
-// _my.value;
-
-// myResource.pipe(Effect.runPromise);
