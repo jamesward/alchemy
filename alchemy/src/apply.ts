@@ -33,14 +33,6 @@ export interface ApplyOptions {
   alwaysUpdate?: boolean;
 }
 
-// export function apply<Out extends Resource>(
-//   resource: PendingResource<Out>,
-//   props: ResourceProps | undefined,
-//   options?: ApplyOptions,
-// ): Promise<Awaited<Out>> {
-//   return _apply(resource, props, options);
-// }
-
 export async function apply<Out extends Resource>(
   resource: PendingResource<Out>,
   props: ResourceProps | undefined,

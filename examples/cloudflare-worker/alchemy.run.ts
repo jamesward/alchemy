@@ -1,4 +1,4 @@
-import alchemy, { type } from "alchemy";
+import alchemy, { Resource, type } from "alchemy";
 import {
   DurableObjectNamespace,
   Queue,
@@ -6,7 +6,9 @@ import {
   Worker,
   Workflow,
 } from "alchemy/cloudflare";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { HelloWorldDO } from "./src/do.ts";
 import type MyRPC from "./src/rpc.ts";
 
@@ -54,7 +56,7 @@ export const worker = Worker("worker", {
   adopt: true,
 });
 
-const DO = await worker.Env.DO.getByName("");
+const DO = await worker.Env.DO.getByName("").connect("");
 
 await worker.Env.QUEUE.send({
   name: "John Doe",
@@ -64,11 +66,37 @@ await worker.Env.QUEUE.send({
 await worker.Env.RPC.hello("John Doe");
 
 Effect.gen(function* () {
-  const DO = yield* worker.Env.DO.getByName("");
+  const workerInstance = yield* worker;
+
+  const bucket = yield* R2Bucket("bucket", {
+    adopt: true,
+  });
 
   const res = yield* worker.Env.RPC.hello("John Doe");
 });
 
 console.log({
   url: await worker.url,
+});
+
+export type MyEffectResource = typeof MyEffectResource.output;
+
+export const MyEffectResource = Resource("my-effect-resource", {
+  input: {
+    key: Schema.String,
+  },
+  output: {
+    /**
+     * The value of the resource.
+     */
+    value: Schema.Number,
+  },
+})(function* (id, props) {
+  // ...
+
+  yield* Console.log(id);
+
+  return {
+    value: 1,
+  };
 });

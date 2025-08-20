@@ -60,7 +60,7 @@ export declare namespace Rune {
           : T extends Binding
             ? T
             : T extends PromiseLike<infer U> | Effect.Effect<infer U>
-              ? Awaited<U>
+              ? await<U>
               : T extends any[]
                 ? awaitArray<T>
                 : T extends object
