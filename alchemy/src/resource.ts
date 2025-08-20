@@ -1,6 +1,10 @@
+import type * as Effect from "effect/Effect";
+import type * as Schema from "effect/Schema";
+import type { YieldWrap } from "effect/Utils";
 import { apply } from "./apply.ts";
 import type { Context } from "./context.ts";
 import { DestroyStrategy } from "./destroy.ts";
+import type { Rune } from "./rune.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
 
 declare global {
@@ -118,15 +122,44 @@ type ResourceLifecycleHandler = (
   props: any,
 ) => Promise<Resource<string>>;
 
-// see: https://x.com/samgoodwin89/status/1904640134097887653
-type Handler<F extends (...args: any[]) => any> =
-  | F
-  | (((this: any, id: string, props?: {}) => never) & IsClass);
+type Handler<F extends (...args: any[]) => any> = (
+  id: string,
+  props: Resource.input<Parameters<F>[1]>,
+) => Rune<Awaited<ReturnType<F>>>;
 
 export function Resource<
-  const Type extends string,
-  F extends ResourceLifecycleHandler,
->(type: Type, fn: F): Handler<F>;
+  const Type extends ResourceKind,
+  Input extends Schema.Struct.Fields,
+  Output extends Schema.Struct.Fields,
+>(
+  type: Type,
+  props: {
+    input: Input;
+    output: Output;
+  },
+): <E, R>(
+  fn: (
+    this: Context<Schema.Struct.Type<Input>, Schema.Struct.Type<Output>>,
+    id: string,
+    props: Schema.Struct.Type<Input>,
+  ) => Generator<
+    YieldWrap<Effect.Effect<any, E, R>>,
+    Schema.Struct.Type<Output>,
+    any
+  >,
+) => {
+  input: Schema.Struct<Input>;
+  output: Schema.Struct.Type<Output>;
+  (
+    id: string,
+    props: Rune.of<Schema.Struct.Type<Input>>,
+  ): Rune<Schema.Struct.Type<Output>>;
+};
+
+export function Resource<F extends ResourceLifecycleHandler>(
+  type: string,
+  fn: F,
+): Handler<F>;
 
 export function Resource<
   const Type extends string,
@@ -134,9 +167,12 @@ export function Resource<
 >(type: Type, options: Partial<ProviderOptions>, fn: F): Handler<F>;
 
 export function Resource<
-  const Type extends ResourceKind,
+  const Type extends string,
   F extends ResourceLifecycleHandler,
->(type: Type, ...args: [Partial<ProviderOptions>, F] | [F]): Handler<F> {
+>(
+  type: Type,
+  ...args: [options: Partial<ProviderOptions>, handler: F] | [handler: F]
+): any {
   const [options, handler] = args.length === 2 ? args : [undefined, args[0]];
   if (PROVIDERS.has(type)) {
     // We want Alchemy to work in a PNPM monorepo environment unfortunately,
@@ -204,3 +240,113 @@ export function Resource<
   PROVIDERS.set(type, provider);
   return provider;
 }
+
+export declare namespace Resource {
+  export type input<T> =
+    | T
+    | Rune.of<T>
+    | (T extends any[]
+        ? inputArray<T>
+        : {
+            [k in keyof T]: input<T[k]>;
+          });
+
+  type inputArray<
+    T extends any[],
+    Accum extends any[] = [],
+  > = number extends T["length"]
+    ? input<T[number]>[]
+    : T extends [infer Head, ...infer Tail]
+      ? inputArray<Tail, [...Accum, input<Head>]>
+      : Accum;
+}
+
+// interface MyResourceProps {
+//   key: string;
+// }
+// type MyResource = Resource<"foo"> & {
+//   value: number;
+// };
+// const MyResource = Resource<MyResourceProps, MyResource>(
+//   "foo",
+//   async function (this, id, props) {
+//     const { key } = await resolve(props);
+//     return this({
+//       value: 1,
+//     });
+//   },
+// );
+// const _MyResource = Resource<MyResourceProps, MyResource>(
+//   "foo",
+//   function* (this, id, props) {
+//     yield* Console.log("foo");
+//     return this({
+//       value: 1,
+//     });
+//   },
+// );
+
+// Effect.gen(function* () {
+//   const myResource = yield* MyResource("foo", {
+//     key: "foo",
+//   }).pipe(
+//     Effect.retry({
+//       times: 1,
+//     }),
+//   );
+//   return myResource;
+// });
+
+// import { Worker } from "alchemy/cloudflare";
+// import * as Console from "effect/Console";
+// import type { YieldWrap } from "effect/Utils";
+// import type { Lazy } from "./lazy.ts";
+
+// async function main() {
+//   const myResource = MyEffectResource("foo", {
+//     // key: "foo",
+//     key: Promise.resolve("foo"),
+//   });
+
+//   await Worker("fo", {
+//     bindings: {
+//       key: myResource.value,
+//     },
+//   });
+
+//   (await myResource).value;
+//   myResource.value;
+// }
+
+// export type MyEffectResource = typeof MyEffectResource.output;
+
+// export const MyEffectResource = Resource({
+//   type: "my-effect-resource",
+//   input: {
+//     key: Schema.String,
+//   },
+//   output: {
+//     /**
+//      * The value of the resource.
+//      */
+//     value: Schema.Number,
+//   },
+// })(function* (id, props) {
+//   // ...
+
+//   yield* Console.log(id);
+
+//   return {
+//     value: 1,
+//   };
+// });
+
+// MyEffectResource.input.fields.key;
+
+// const _my = await MyEffectResource("foo", {
+//   key: "foo",
+// });
+
+// _my.value;
+
+// myResource.pipe(Effect.runPromise);

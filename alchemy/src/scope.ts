@@ -279,6 +279,8 @@ export class Scope {
     this.dataMutex = new AsyncMutex();
   }
 
+  async fetch(request: Request) {}
+
   public createPhysicalName(id: string, delimiter = "-"): string {
     return [...this.chain, id]
       .map((s) => s.replaceAll(/[^a-z0-9_-]/i, delimiter))

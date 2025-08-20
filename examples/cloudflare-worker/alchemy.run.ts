@@ -1,3 +1,4 @@
+import type { Rune } from "alchemy";
 import alchemy, { type } from "alchemy";
 import {
   DurableObjectNamespace,
@@ -5,36 +6,35 @@ import {
   R2Bucket,
   Worker,
   Workflow,
-  WranglerJson,
 } from "alchemy/cloudflare";
+import * as Effect from "effect/Effect";
 import type { HelloWorldDO } from "./src/do.ts";
 import type MyRPC from "./src/rpc.ts";
 
-const app = await alchemy("cloudflare-worker");
+export default alchemy("cloudflare-worker");
 
-export const queue = await Queue<{
+export const queue = Queue<{
   name: string;
   email: string;
 }>("queue", {
-  name: `${app.name}-${app.stage}-queue`,
   adopt: true,
 });
 
-export const rpc = await Worker("rpc", {
-  name: `${app.name}-${app.stage}-rpc`,
+export const rpc = Worker("rpc", {
   entrypoint: "./src/rpc.ts",
   rpc: type<MyRPC>,
   adopt: true,
 });
 
-export const worker = await Worker("worker", {
-  name: `${app.name}-${app.stage}-worker`,
+const bucket = R2Bucket("bucket", {
+  adopt: true,
+});
+
+export const worker = Worker("worker", {
   entrypoint: "./src/worker.ts",
   bindings: {
-    BUCKET: await R2Bucket("bucket", {
-      name: `${app.name}-${app.stage}-bucket`,
-      adopt: true,
-    }),
+    RPC: rpc,
+    BUCKET: bucket,
     QUEUE: queue,
     WORKFLOW: Workflow("OFACWorkflow", {
       className: "OFACWorkflow",
@@ -44,7 +44,6 @@ export const worker = await Worker("worker", {
       className: "HelloWorldDO",
       sqlite: true,
     }),
-    RPC: rpc,
   },
   url: true,
   eventSources: [queue],
@@ -56,10 +55,27 @@ export const worker = await Worker("worker", {
   adopt: true,
 });
 
-await WranglerJson("wrangler.jsonc", {
-  worker,
+const DO = await worker.Env.DO.getByName("");
+
+await worker.Env.QUEUE.send({
+  name: "John Doe",
+  email: "john.doe@example.com",
 });
 
-console.log(worker.url);
+await worker.Env.RPC.hello("John Doe");
 
-await app.finalize();
+Effect.gen(function* () {
+  const DO = yield* worker.Env.DO.getByName("");
+
+  const res = yield* worker.Env.RPC.hello("John Doe");
+});
+
+type Foo = PromiseLike<string> & string & Effect.Effect<string, never, never>;
+
+type Bar = Rune<string>;
+
+const url = worker.url!;
+
+console.log({
+  url: await worker.url,
+});

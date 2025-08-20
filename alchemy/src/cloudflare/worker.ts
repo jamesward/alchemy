@@ -58,6 +58,7 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import type { Rune } from "../rune.ts";
 
 /**
  * Configuration options for static assets
@@ -687,16 +688,30 @@ export type Worker<
  * console.log(`Preview URL: ${previewWorker.url}`);
  * // Output: Preview URL: https://pr-123-my-worker.subdomain.workers.dev
  */
-export function Worker<
-  const B extends Bindings,
-  RPC extends Rpc.WorkerEntrypointBranded,
->(id: string, props: WorkerProps<B, RPC>): Promise<Worker<B, RPC>>;
+// export function Worker<
+//   const Props extends Resource.input<WorkerProps<Bindings, any>>,
+// >(
+//   id: string,
+//   props: Props,
+// ): Rune.of<Worker<ExtractBindings<Props>, ExtractRpc<Props>>>;
 
-export function Worker<const B extends Bindings>(
+export function Worker<const Props extends Resource.input<WorkerProps>>(
   id: string,
-  props: WorkerProps<B>,
-): Promise<Worker<B>> {
-  return _Worker(id, props as WorkerProps<B>);
+  props: Props,
+) {
+  return _Worker(id, props) as Rune.of<
+    Worker<Worker.awaitBindings<Props>, Worker.awaitRpc<Props>>
+  >;
+}
+
+export declare namespace Worker {
+  export type awaitRpc<Props extends Resource.input<WorkerProps>> =
+    Rune.await<Props>["rpc"] extends type<infer U>
+      ? U & Rpc.WorkerEntrypointBranded
+      : never;
+
+  export type awaitBindings<Props extends Resource.input<WorkerProps>> =
+    Extract<Rune.await<Props>["bindings"], Bindings | undefined>;
 }
 
 const _Worker = Resource(
