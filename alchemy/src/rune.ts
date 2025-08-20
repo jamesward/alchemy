@@ -8,6 +8,7 @@ export interface Rune<T> extends PromiseLike<T>, Effect.Effect<T> {}
 export function Rune<T>(effect: Effect.Effect<T, any, never>): Rune.of<T> {
   return new Proxy(() => {}, {
     apply: (_, _thisArg, args) =>
+      // TODO(sam): resolves the args which are Resource.input<T> (T | Rune<T>)
       Rune(effect.pipe(Effect.map((fn: any) => fn(...args)))),
     get(_: any, prop: string | symbol | number) {
       const p = effect.pipe(Effect.map((x: any) => x[prop]));

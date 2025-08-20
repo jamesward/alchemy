@@ -678,41 +678,43 @@ export type Worker<
  *
  * @example
  * // Create a worker version for testing with a preview URL:
- * const previewWorker = await Worker("my-worker", {
+ * const previewWorker = Worker("my-worker", {
  *   name: "my-worker",
  *   entrypoint: "./src/worker.ts",
  *   version: "pr-123"
  * });
  *
  * // The worker will have a preview URL for testing:
- * console.log(`Preview URL: ${previewWorker.url}`);
+ * console.log(`Preview URL: ${await previewWorker.url}`);
  * // Output: Preview URL: https://pr-123-my-worker.subdomain.workers.dev
  */
-// export function Worker<
-//   const Props extends Resource.input<WorkerProps<Bindings, any>>,
-// >(
-//   id: string,
-//   props: Props,
-// ): Rune.of<Worker<ExtractBindings<Props>, ExtractRpc<Props>>>;
-
 export function Worker<const Props extends Resource.input<WorkerProps>>(
   id: string,
   props: Props,
 ) {
   return _Worker(id, props) as Rune.of<
-    Worker<Worker.awaitBindings<Props>, Worker.awaitRpc<Props>>
-  >;
+    Worker<awaitBindings<Props>, awaitRpc<Props>>
+  > & {
+    // TODO(sam): we have Env and _Env - consolidate
+    _Env: Worker.Env<Worker<awaitBindings<Props>, awaitRpc<Props>>>;
+  };
 }
 
 export declare namespace Worker {
-  export type awaitRpc<Props extends Resource.input<WorkerProps>> =
-    Rune.await<Props>["rpc"] extends type<infer U>
-      ? U & Rpc.WorkerEntrypointBranded
-      : never;
-
-  export type awaitBindings<Props extends Resource.input<WorkerProps>> =
-    Extract<Rune.await<Props>["bindings"], Bindings | undefined>;
+  export type Env<W extends { bindings: any }> = Bindings.Runtime<
+    Rune.await<W["bindings"]>
+  >;
 }
+
+type awaitRpc<Props extends Resource.input<WorkerProps>> =
+  Rune.await<Props>["rpc"] extends type<infer U>
+    ? U & Rpc.WorkerEntrypointBranded
+    : never;
+
+type awaitBindings<Props extends Resource.input<WorkerProps>> = Extract<
+  Rune.await<Props>["bindings"],
+  Bindings | undefined
+>;
 
 const _Worker = Resource(
   "cloudflare::Worker",

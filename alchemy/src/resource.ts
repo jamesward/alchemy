@@ -125,7 +125,7 @@ type ResourceLifecycleHandler = (
 type Handler<F extends (...args: any[]) => any> = (
   id: string,
   props: Resource.input<Parameters<F>[1]>,
-) => Rune<Awaited<ReturnType<F>>>;
+) => Rune.of<Awaited<ReturnType<F>>>;
 
 export function Resource<
   const Type extends ResourceKind,
